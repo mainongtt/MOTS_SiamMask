@@ -32,9 +32,6 @@ thrs = np.arange(0.3, 0.5, 0.05)
 parser = argparse.ArgumentParser(description='SiamMask')
 parser.add_argument('--arch', dest='arch', default='', choices=['Custom',],
                     help='architecture of pretrained model')
-parser.add_argument('--config', default='SiamMask/config/config_vot.json', dest='config', help='hyper-parameter for SiamMask')
-parser.add_argument('--resume', default='SiamMask/pretrained/SiamMask_VOT.pth', type=str,
-                    metavar='PATH', help='path to latest checkpoint (default: none)')
 parser.add_argument('--mask', default=True, action='store_true', help='whether use mask output')
 parser.add_argument('--refine', default=True, action='store_true', help='whether use mask refine output')
 parser.add_argument('--cpu', action='store_true', help='cpu mode')
@@ -166,9 +163,13 @@ def MultiBatchIouMeter(thrs, outputs, targets, start=None, end=None):
 #                    尚未对 Siammask 的具体的一些超参数进行细致理解
 #                    Dangerous 中的代码最好不要动
 ########################################################################
-class SingleTracking(object):
-    def __init__(self):
+
+class SingleTracker(object):
+    def __init__(self, config_path='config/config_vot.json', model_path='pretrained/SiamMask_VOT.pth'):
         args = parser.parse_args()
+        args.config = config_path
+        args.resume = model_path
+
         cfg = load_config(args)
         if args.arch == 'Custom':
             from custom import Custom
@@ -352,19 +353,17 @@ class SingleTracking(object):
         mask = mask_in_img if mask_enable else []
         return target_pos, target_sz, score, mask
 
-    
-
-
 if __name__ == '__main__':
-    mytracking = SingleTracking()
-    img1 = cv2.imread('testdata/img/00000001.jpg')
-    img2 = cv2.imread('testdata/img/00000002.jpg')
+    mytracker = SingleTracker()
+    img1 = cv2.imread('testdata/img/000001.png')
+    img2 = cv2.imread('testdata/img/000002.png')
     target_pos = np.array([365, 194])
     target_sz = np.array([90, 120])
 
-    examplar_feature = mytracking.get_examplar_feature(img1, target_pos, target_sz)
-    _, _, _, mask = mytracking.siamese_track(img, target_pos, target_sz, examplar_feature)
-    cv2.imshow("test", mask)
-    cv2.waitKey(0)
+    examplar_feature = mytracker.get_examplar_feature(img1, target_pos, target_sz)
+    _, _, _, mask = mytracker.siamese_track(img1, target_pos, target_sz, examplar_feature)
+    print(mask.shape)
+    #cv2.imshow("test", mask)
+    #cv2.waitKey(0)
 
 
