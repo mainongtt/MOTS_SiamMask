@@ -218,15 +218,23 @@ class SingleTracking(object):
         im_h = img.shape[0]
         im_w = img.shape[1]
 
-        wc_x = target_sz[1] + self.p.context_amount * sum(target_sz)
-        hc_x = target_sz[0] + self.p.context_amount * sum(target_sz)
+        wc_x = target_sz[0] + self.p.context_amount * sum(target_sz)
+        hc_x = target_sz[1] + self.p.context_amount * sum(target_sz)
         s_x = np.sqrt(wc_x * hc_x)
+        '''
         scale_x = self.p.exemplar_size / s_x
         d_search = (self.p.instance_size - self.p.exemplar_size) / 2
         pad = d_search / scale_x
         s_x = s_x + 2 * pad
         crop_box = [target_pos[0] - round(s_x) / 2, target_pos[1] - round(s_x) / 2, round(s_x), round(s_x)]
-        
+        '''
+        # myy
+        # 上面注释的部分, 原作者写的代码可以简化为下面三句
+        scale_x = self.p.exemplar_size / s_x
+        s_x = self.p.instance_size / self.p.exemplar_size * s_x
+        crop_box = [target_pos[0] - round(s_x) / 2, target_pos[1] - round(s_x) / 2, round(s_x), round(s_x)]
+
+
         # extract scaled crops for search region x at previous target position
         x_crop = Variable(get_subwindow_tracking(img, target_pos, self.p.instance_size, round(s_x), avg_chans).unsqueeze(0))
 
