@@ -71,6 +71,22 @@ class Detector(object):
         Params:
             imgs: a list of images like [img1,img2,...]
             verbose:
+        Return format:
+            [{'masks': array with shape = (image_h, image_w, object_num)
+              'rois': array with shape = (object_num, 4)
+              'class_ids': array with shape = (object_num,)
+              'scores': array with shape = (object_num,)}, 
+             {'masks': array with shape = (image_h, image_w, object_num)
+              'rois': array with shape = (object_num, 4)
+              'class_ids': array with shape = (object_num,)
+              'scores': array with shape = (object_num,)},
+             {'masks': array with shape = (image_h, image_w, object_num)
+              'rois': array with shape = (object_num, 4)
+              'class_ids': array with shape = (object_num,)
+              'scores': array with shape = (object_num,)},
+             ......
+             ......
+            ]
         '''
         result = self.model.detect(imgs, verbose=verbose)
         return result
@@ -83,7 +99,37 @@ if __name__ == "__main__":
     model_dir = 'logs'
     mydetector = Detector(coco_model_path, model_dir)
 
-    img = skimage.io.imread('images/9247489789_132c0d534a_z.jpg')
-    for i in range(4):
-        result = mydetector.detect([img])
-    print(result[0]['masks'].shape)
+    dataset_path = '../Dataset/MOTSChallenge'
+    videos_path = os.path.join(dataset_path, 'images')
+    videos = os.listdir(videos_path)   #['0002', '0005', ...]
+
+    det_result_path = os.path.join(dataset_path, 'maskrcnn')
+    if not os.path.exists(det_result_path):
+        os.mkdir(det_result_path)
+    
+    for video in videos:
+        video_path = os.path.join(videos_path, video)
+
+        output_path = os.path.join(det_result_path, video)
+        if not os.path.exists(output_path):
+            os.mkdir(output_path)
+        
+        frames = os.listdir(video_path) #['000001.jpg', '000002.jpg',...]
+        
+
+        for frame in frames:
+            img = skimage.io.imread(os.path.join(video_path, frame))
+            det_result = mydetector.detect([img])
+
+            frame_masks = det_result[0]['masks']
+            frame_rois = det_result[0]['rois']
+            frame_class_ids = det_result[0]['class_ids']
+            frame_scores = det_result[0]['scores']
+
+            frame_without_suffix = frame.split('.')[0]
+            np.savez_compressed(os.path.join(output_path, frame_without_suffix + '.npz'), 
+                                    masks=frame_masks,
+                                    rois=frame_rois,
+                                    class_ids=frame_class_ids,
+                                    scores=frame_scores )
+            

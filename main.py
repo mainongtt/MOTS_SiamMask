@@ -14,6 +14,7 @@ import numpy as np
 import singletracker
 import detector
 
+
 class Tracklet(object):
     def __init__(self, target_id, target_pos, target_sz, target_mask, target_score, examplar_feature):
         self.target_id = target_id
@@ -33,28 +34,63 @@ class Tracklet(object):
 
 
 
+
 if __name__ == '__main__':
 
-    # Single object tracker Siammask
-    # Defined in SiamMask/singletracker.py
+    
+    ## Single object tracker Siammask
+    ## Defined in SiamMask/singletracker.py
     vot_model_path = 'SiamMask/pretrained/SiamMask_VOT.pth'
     vot_config_path = 'SiamMask/config/config_vot.json'
     mytracker = singletracker.SingleTracker(vot_config_path, vot_model_path)
     
 
-
     
-    # Bbox and mask Detecter
-    # Defined in MaskRCNN/detector
+    ## Bbox and mask Detecter
+    ## Defined in MaskRCNN/detector
     coco_model_path = 'MaskRCNN/pretrained/mask_rcnn_coco.h5'
     model_dir = 'MaskRCNN/logs'
     mydetector = detector.Detector(coco_model_path, model_dir)
 
+
+    ## Mian process pipeline
+    dataset_path = 'Dataset/MOTSChallenge'
+    det_result_path = os.path.join(dataset_path, 'maskrcnn')
+    videos = os.listdir(det_result_path)    #['0002', '0005', ...]
+
+    for video in videos:
+        video_path = os.path.join(det_result_path, video)
+        frames = os.listdir(video_path)    #['000001.npz', '000002.npz',...]
+
+        #### Tracking for a video start
+
+        tracklets = []    # List to store tracklets for a video
+        for frame in frames:
+            raw_image_path = os.path.join(video_path, frame).replace('maskrcnn', 'images').replace('npz', 'jpg')
+            frame_image = cv2.imread(raw_image_path)
+
+            det_result = np.load( os.path.join(video_path, frame) )
+            frame_masks = det_result['masks']
+            frame_rois = det_result['rois']
+            frame_class_ids = det_result['class_ids']
+            frame_scores = det_result['scores']
+
+            if len(tracklets) == 0:
+                ## Init tracklets with current frame
+                
+
+
+                
+
+
+
+
     '''
     img = skimage.io.imread('MaskRCNN/images/9247489789_132c0d534a_z.jpg')
     result = mydetector.detect([img])
-    print(result[0]['masks'].shape)
+    print(result[0]['rois'].shape)
     '''
+
 
 
     '''
