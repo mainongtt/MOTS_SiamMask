@@ -73,7 +73,7 @@ class Detector(object):
             verbose:
         Return format:
             [{'masks': array with shape = (image_h, image_w, object_num)
-              'rois': array with shape = (object_num, 4)
+              'rois': array with shape = (object_num, 4) where 4 indicate: y1, x1, y2, x2
               'class_ids': array with shape = (object_num,)
               'scores': array with shape = (object_num,)}, 
              {'masks': array with shape = (image_h, image_w, object_num)

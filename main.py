@@ -24,6 +24,7 @@ class Args(object):
     def __init__(self):
         self.visualize = True
         self.siammask_threshold = 0.3
+        self.iou_threshold = 0.4
 
 
 
@@ -79,7 +80,7 @@ def mask_iou(det_mask, pred_mask):
 
 
 
-def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.5):
+def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.4):
     ## Conduct association between frame_detect_result and tracklets' predicted result
      # Without appearance matching 20190830
     frame_masks = det_result['masks']
@@ -95,7 +96,7 @@ def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.5)
             iou_matrix[det_object_index][tracklet_index] = mask_iou( frame_masks[:, :, det_object_index], tracklets[tracklet_index].predicted_mask )
     matched_indices = linear_assignment(-iou_matrix)
 
-    ############## start sort ################
+
     unmatched_detections = []
     for det_object_index in range(det_object_num):
         if( det_object_index not in matched_indices[:,0] ):
@@ -124,12 +125,26 @@ def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.5)
 
 
 
-def visualize_current_frame(frame_image, tracklets):
-    for tracklet in tracklets:
-        mask = tracklet.target_mask
-        frame_image[:, :, 2] = mask * 255 + (1 - mask) * frame_image[:, :, 2]
-    cv2.imshow('test', frame_image)
-    cv2.waitKey(1)
+def visualize_current_frame(frame_image, tracklets, pred=True):
+    if pred == True:
+        for tracklet in tracklets:
+            if tracklet.predicted_pos is not None:
+                mask = tracklet.predicted_mask
+                frame_image[:, :, 2] = mask * 255 + (1 - mask) * frame_image[:, :, 2]
+                text = 'id: ' + str(tracklet.target_track_id)
+                cols = int(tracklet.predicted_pos[0])
+                rows = int(tracklet.predicted_pos[1])
+                cv2.putText(frame_image, text, (cols, rows), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 255, 0), 2)
+    
+    else:
+        for tracklet in tracklets:
+            mask = tracklet.target_mask
+            frame_image[:, :, 2] = mask * 255 + (1 - mask) * frame_image[:, :, 2]
+            text = 'id: ' + str(tracklet.target_track_id)
+            cols = int(tracklet.target_pos[0])
+            rows = int(tracklet.target_pos[1])
+            cv2.putText(frame_image, text, (cols, rows), cv2.FONT_HERSHEY_PLAIN, 1.2, (255, 255, 0), 2)
+    return frame_image
 
 
 
@@ -174,7 +189,7 @@ if __name__ == '__main__':
         frames.sort()    # To make the frame in order
 
         #### Tracking for a video start
-        tracklets = []    # List to store tracklets for a video
+        tracklets = []    # A list to store tracklets for a video
         track_id_to_assign = 0    # The unused track_id to be assigned
 
         for frame in frames:
@@ -200,8 +215,8 @@ if __name__ == '__main__':
 
                     obj_roi = frame_rois[obj_index]
 
-                    obj_pos = np.array( [np.mean(obj_roi[0::2]), np.mean(obj_roi[1::2])] )
-                    obj_sz = np.array( [obj_roi[2]-obj_roi[0], obj_roi[3]-obj_roi[1]] )
+                    obj_pos = np.array( [np.mean(obj_roi[1::2]), np.mean(obj_roi[0::2])] )
+                    obj_sz = np.array( [obj_roi[3]-obj_roi[1], obj_roi[2]-obj_roi[0]] )
                     
                     obj_mask = frame_masks[:, :, obj_index]
                     obj_score = frame_scores[obj_index]
@@ -221,7 +236,7 @@ if __name__ == '__main__':
 
                     tracklet.update_predicted_state(predicted_pos, predicted_sz, predicted_mask, predicted_score)
                 
-                matched, unmatched_det_result, unmatched_tracklets = associate_detection_to_tracklets(det_result, tracklets)
+                matched, unmatched_det_result, unmatched_tracklets = associate_detection_to_tracklets(det_result, tracklets, args.iou_threshold)
                 
                 ## Update matched tracklets with assigned det result
                 for tracklet_index, tracklet in enumerate(tracklets):
@@ -230,8 +245,8 @@ if __name__ == '__main__':
 
                         obj_roi = det_result['rois'][det_result_index]
 
-                        obj_pos = np.array( [np.mean(obj_roi[0::2]), np.mean(obj_roi[1::2])] )
-                        obj_sz = np.array( [obj_roi[2]-obj_roi[0], obj_roi[3]-obj_roi[1]] )
+                        obj_pos = np.array( [np.mean(obj_roi[1::2]), np.mean(obj_roi[0::2])] )
+                        obj_sz = np.array( [obj_roi[3]-obj_roi[1], obj_roi[2]-obj_roi[0]] )
 
                         obj_mask = det_result['masks'][:, :, det_result_index]
                         obj_score = det_result['scores'][det_result_index]
@@ -243,8 +258,8 @@ if __name__ == '__main__':
                     obj_class_id = det_result['class_ids'][det_result_index]
 
                     obj_roi = det_result['rois'][det_result_index]
-                    obj_pos = np.array( [np.mean(obj_roi[0::2]), np.mean(obj_roi[1::2])] )
-                    obj_sz = np.array( [obj_roi[2]-obj_roi[0], obj_roi[3]-obj_roi[1]] )
+                    obj_pos = np.array( [np.mean(obj_roi[1::2]), np.mean(obj_roi[0::2])] )
+                    obj_sz = np.array( [obj_roi[3]-obj_roi[1], obj_roi[2]-obj_roi[0]] )
 
                     obj_mask = det_result['masks'][:, :, det_result_index]
                     obj_score = det_result['scores'][det_result_index]
@@ -262,7 +277,10 @@ if __name__ == '__main__':
                         tracklets.pop(tracklet_index)
 
             if args.visualize == True:
-                visualize_current_frame(frame_image, tracklets)
+                visual = visualize_current_frame(frame_image, tracklets, pred=False)
+                visual_save_path = os.path.join(video_track_result_path, frame.split('.')[0] + '.jpg')
+                cv2.imwrite(visual_save_path, visual)
+            
 
 
 
