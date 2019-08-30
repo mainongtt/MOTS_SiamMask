@@ -6,7 +6,7 @@ MaskRCNNPath = os.path.join(os.getcwd(), 'MaskRCNN')
 sys.path.append(MaskRCNNPath)
 
 import cv2
-import skimage.io
+#import skimage.io
 import numpy as np
 
 from sklearn.utils.linear_assignment_ import linear_assignment
@@ -99,21 +99,21 @@ def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.5)
     unmatched_detections = []
     for det_object_index in range(det_object_num):
         if( det_object_index not in matched_indices[:,0] ):
-        unmatched_detections.append(det_object_index)
+            unmatched_detections.append(det_object_index)
     
     unmatched_tracklets = []
     for tracklet_index in range(tracklet_num):
         if( tracklet_index not in matched_indices[:,1] ):
-        unmatched_tracklets.append(tracklet_index)
+            unmatched_tracklets.append(tracklet_index)
 
     #filter out matched with low IOU
     matches = []
     for m in matched_indices:
         if(iou_matrix[m[0],m[1]] < iou_threshold):
-        unmatched_detections.append(m[0])
-        unmatched_tracklets.append(m[1])
+            unmatched_detections.append(m[0])
+            unmatched_tracklets.append(m[1])
         else:
-        matches.append(m.reshape(1,2))
+            matches.append(m.reshape(1,2))
     if(len(matches)==0):
         matches = np.empty((0,2),dtype=int)
     else:
@@ -127,7 +127,7 @@ def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.5)
 def visualize_current_frame(frame_image, tracklets):
     for tracklet in tracklets:
         mask = tracklet.target_mask
-        frame[:, :, 2] = mask * 255 + (1 - mask) * img[:, :, 2]
+        frame_image[:, :, 2] = mask * 255 + (1 - mask) * frame_image[:, :, 2]
     cv2.imshow('test', frame_image)
     cv2.waitKey(1)
 
@@ -166,7 +166,7 @@ if __name__ == '__main__':
     videos = os.listdir(det_result_path)    #['0002', '0005', ...]
     for video in videos:
         video_path = os.path.join(det_result_path, video)
-        video_track_result_path = os.pdet_object_numath.join(track_result_path, video)
+        video_track_result_path = os.path.join(track_result_path, video)
         if not os.path.exists(video_track_result_path):
             os.mkdir(video_track_result_path)
         
@@ -199,6 +199,7 @@ if __name__ == '__main__':
                     obj_class_id = frame_class_ids[obj_index]
 
                     obj_roi = frame_rois[obj_index]
+
                     obj_pos = np.array( [np.mean(obj_roi[0::2]), np.mean(obj_roi[1::2])] )
                     obj_sz = np.array( [obj_roi[2]-obj_roi[0], obj_roi[3]-obj_roi[1]] )
                     
@@ -225,13 +226,14 @@ if __name__ == '__main__':
                 ## Update matched tracklets with assigned det result
                 for tracklet_index, tracklet in enumerate(tracklets):
                     if (tracklet_index not in unmatched_tracklets):
-                        det_result_index = matched[np.where(matched[:, 1]==tracklet_index)[0], 0]
+                        det_result_index = int( matched[np.where(matched[:, 1]==tracklet_index)[0], 0] )    # det_result_index have to be a value not an array
 
                         obj_roi = det_result['rois'][det_result_index]
+
                         obj_pos = np.array( [np.mean(obj_roi[0::2]), np.mean(obj_roi[1::2])] )
                         obj_sz = np.array( [obj_roi[2]-obj_roi[0], obj_roi[3]-obj_roi[1]] )
 
-                        obj_mask = det_result['masks'][det_result_index]
+                        obj_mask = det_result['masks'][:, :, det_result_index]
                         obj_score = det_result['scores'][det_result_index]
 
                         tracklet.update_state(obj_pos, obj_sz, obj_mask, obj_score)
@@ -244,7 +246,7 @@ if __name__ == '__main__':
                     obj_pos = np.array( [np.mean(obj_roi[0::2]), np.mean(obj_roi[1::2])] )
                     obj_sz = np.array( [obj_roi[2]-obj_roi[0], obj_roi[3]-obj_roi[1]] )
 
-                    obj_mask = det_result['masks'][det_result_index]
+                    obj_mask = det_result['masks'][:, :, det_result_index]
                     obj_score = det_result['scores'][det_result_index]
                     examplar_feature = mytracker.get_examplar_feature(frame_image, obj_pos, obj_sz)
                     
