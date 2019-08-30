@@ -67,7 +67,6 @@ class Tracklet(object):
 
 
 
-
 def mask_iou(det_mask, pred_mask):
     '''
     Computes IoU between two masks
@@ -79,8 +78,7 @@ def mask_iou(det_mask, pred_mask):
 
 
 
-
-def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.4):
+def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.3):
     ## Conduct association between frame_detect_result and tracklets' predicted result
      # Without appearance matching 20190830
     frame_masks = det_result['masks']
@@ -128,13 +126,13 @@ def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.4)
 def visualize_current_frame(frame_image, tracklets, pred=True):
     if pred == True:
         for tracklet in tracklets:
-            if tracklet.predicted_pos is not None:
+            if tracklet.predicted_mask is not None:
                 mask = tracklet.predicted_mask
                 frame_image[:, :, 2] = mask * 255 + (1 - mask) * frame_image[:, :, 2]
                 text = 'id: ' + str(tracklet.target_track_id)
                 cols = int(tracklet.predicted_pos[0])
                 rows = int(tracklet.predicted_pos[1])
-                cv2.putText(frame_image, text, (cols, rows), cv2.FONT_HERSHEY_PLAIN, 1.2, (0, 255, 0), 2)
+                cv2.putText(frame_image, text, (cols, rows), cv2.FONT_HERSHEY_PLAIN, 1.2, (255, 255, 0), 2)
     
     else:
         for tracklet in tracklets:
@@ -186,7 +184,7 @@ if __name__ == '__main__':
             os.mkdir(video_track_result_path)
         
         frames = os.listdir(video_path)    #['000001.npz', '000002.npz',...]
-        frames.sort()    # To make the frame in order
+        frames.sort()    # To make the frames in order
 
         #### Tracking for a video start
         tracklets = []    # A list to store tracklets for a video
@@ -258,8 +256,8 @@ if __name__ == '__main__':
                     obj_class_id = det_result['class_ids'][det_result_index]
 
                     obj_roi = det_result['rois'][det_result_index]
-                    obj_pos = np.array( [np.mean(obj_roi[1::2]), np.mean(obj_roi[0::2])] )
-                    obj_sz = np.array( [obj_roi[3]-obj_roi[1], obj_roi[2]-obj_roi[0]] )
+                    obj_pos = np.array( [np.mean(obj_roi[1::2]), np.mean(obj_roi[0::2])] )    # rois = np.array([y1, x1, y2, x2]) , obj_pos = np.array([x, y])
+                    obj_sz = np.array( [obj_roi[3]-obj_roi[1], obj_roi[2]-obj_roi[0]] )    # rois = np.array([y1, x1, y2, x2]) , obj_sz = np.array([width, height])
 
                     obj_mask = det_result['masks'][:, :, det_result_index]
                     obj_score = det_result['scores'][det_result_index]
