@@ -4,7 +4,6 @@
 # Written by Qiang Wang (wangqiang2015 at ia.ac.cn)
 # --------------------------------------------------------
 from __future__ import division
-import argparse
 import logging
 import numpy as np
 import cv2
@@ -29,12 +28,22 @@ from utils.pyvotkit.region import vot_overlap, vot_float2str
 
 thrs = np.arange(0.3, 0.5, 0.05)
 
-parser = argparse.ArgumentParser(description='SiamMask')
-parser.add_argument('--arch', dest='arch', default='', choices=['Custom',],
-                    help='architecture of pretrained model')
-parser.add_argument('--mask', default=True, action='store_true', help='whether use mask output')
-parser.add_argument('--refine', default=True, action='store_true', help='whether use mask refine output')
-parser.add_argument('--cpu', action='store_true', help='cpu mode')
+
+
+
+## Parameters class
+class TrackArgs():
+    def __init__(self):
+        self.name = 'SiamMask'
+
+        ## Default values
+        self.arch = 'Custom'    # choices = ['Custom', ]
+        self.mask = True
+        self.refine = True
+        self.cpu = False
+        self.config ='config/config_vot.json'
+        self.model ='pretrained/SiamMask_VOT.pth'
+
 
 
 def to_torch(ndarray):
@@ -162,11 +171,13 @@ def MultiBatchIouMeter(thrs, outputs, targets, start=None, end=None):
 # Description:       修改了 Siammask 的测试代码得到一个单目标跟踪的 Trcker
 #                    尚未对 Siammask 的具体的一些超参数进行细致理解
 #                    Dangerous 中的代码最好不要动
+#
+#                    用 TrackArgs 类替代了命令行参数
 ########################################################################
 
 class SingleTracker(object):
-    def __init__(self, config_path='config/config_vot.json', model_path='pretrained/SiamMask_VOT.pth'):
-        args = parser.parse_args()
+    def __init__(self, config_path, model_path):
+        args = TrackArgs()
         args.config = config_path
         args.resume = model_path
 
