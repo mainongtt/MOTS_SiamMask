@@ -6,7 +6,6 @@ MaskRCNNPath = os.path.join(os.getcwd(), 'MaskRCNN')
 sys.path.append(MaskRCNNPath)
 
 import cv2
-#import skimage.io
 import numpy as np
 
 from sklearn.utils.linear_assignment_ import linear_assignment
@@ -24,7 +23,7 @@ class Args(object):
     def __init__(self):
         self.visualize = True
         self.siammask_threshold = 0.3
-        self.iou_threshold = 0.4
+        self.iou_threshold = 0.3
 
 
 
@@ -56,7 +55,7 @@ class Tracklet(object):
         self.target_score = target_score
         self.match_feature = match_feature
         
-        self.update_flag = True
+        self.update_flag = True    # To prove the tracklet is updated in current frame
 
 
     def update_predicted_state(self, predicted_pos, predicted_sz, predicted_mask, predicted_score):
@@ -78,7 +77,7 @@ def mask_iou(det_mask, pred_mask):
 
 
 
-def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.3):
+def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.5):
     ## Conduct association between frame_detect_result and tracklets' predicted result
      # Without appearance matching 20190830
     frame_masks = det_result['masks']
@@ -112,7 +111,7 @@ def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.3)
             unmatched_detections.append(m[0])
             unmatched_tracklets.append(m[1])
         else:
-            matches.append(m.reshape(1,2))
+            matches.append( m.reshape(1,2) )
     if(len(matches)==0):
         matches = np.empty((0,2),dtype=int)
     else:
@@ -195,6 +194,19 @@ if __name__ == '__main__':
             frame_image = cv2.imread(raw_image_path)
 
             det_result = np.load( os.path.join(video_path, frame) )
+
+            ## Select the detection result with class people (1) and car (3)
+            class_id_set = set( [1, 3] )
+            class_filter = [ index for index, item in enumerate(det_result['class_ids']) if item in class_id_set ]
+
+            filt_det_result = {}
+            filt_det_result['masks'] = det_result['masks'][:, :, class_filter]
+            filt_det_result['rois'] = det_result['rois'][class_filter]
+            filt_det_result['class_ids'] = det_result['class_ids'][class_filter]
+            filt_det_result['scores'] = det_result['scores'][class_filter]
+
+            det_result = filt_det_result
+
 
             for tracklet in tracklets:
                 tracklet.update_flag = False
