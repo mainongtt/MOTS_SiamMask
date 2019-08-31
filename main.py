@@ -7,6 +7,7 @@ sys.path.append(MaskRCNNPath)
 
 import cv2
 import numpy as np
+import PIL.Image as Image
 
 from sklearn.utils.linear_assignment_ import linear_assignment
 
@@ -21,9 +22,10 @@ import singletracker
 ## Args class for debugging only
 class Args(object):
     def __init__(self):
-        self.visualize = True
+        self.visualize = False
         self.siammask_threshold = 0.3
         self.iou_threshold = 0.3
+        self.store_for_eval = True
 
 
 
@@ -33,6 +35,11 @@ class Tracklet(object):
         self.target_track_id = target_track_id
 
         self.target_class_id = target_class_id
+        if target_class_id == 1:
+            self.base_number = 2000
+        else:
+            self.base_number = 1000
+        
         self.target_pos = target_pos
         self.target_sz = target_sz
         self.target_mask = target_mask
@@ -66,6 +73,7 @@ class Tracklet(object):
 
 
 
+
 def mask_iou(det_mask, pred_mask):
     '''
     Computes IoU between two masks
@@ -74,6 +82,7 @@ def mask_iou(det_mask, pred_mask):
     Union = (pred_mask + det_mask) != 0
     Intersection =  (pred_mask * det_mask) != 0
     return np.sum(Intersection) / np.sum(Union)
+
 
 
 
@@ -146,6 +155,23 @@ def visualize_current_frame(frame_image, tracklets, pred=True):
 
 
 
+def frame_store_for_eval(frame_image, tracklets):
+    tracklet_num = len(tracklets)
+    if tracklet_num == 0:
+        return np.zeros(shape = frame_image.shape[0:2]).astype(np.int32)
+    
+    mask_list = [ (tracklet.target_track_id + tracklet.base_number) * tracklet.target_mask for tracklet in tracklets ]
+
+    ## Here is just a simple method to solve overlap
+    result = mask_list[0]
+    for index in range(1, tracklet_num):
+        overlap_mask = result * mask_list[index] == 0
+        result += mask_list[index] * overlap_mask
+    return result.astype(np.int32)
+
+
+
+
 
 
 if __name__ == '__main__':
@@ -159,14 +185,6 @@ if __name__ == '__main__':
     vot_config_path = 'SiamMask/config/config_vot.json'
     mytracker = singletracker.SingleTracker(vot_config_path, vot_model_path)
     
-
-    '''
-    ## Bbox and mask Detecter
-    ## Defined in MaskRCNN/detector
-    coco_model_path = 'MaskRCNN/pretrained/mask_rcnn_coco.h5'
-    model_dir = 'MaskRCNN/logs'
-    mydetector = detector.Detector(coco_model_path, model_dir)
-    '''
 
     ## Mian process pipeline
     dataset_path = 'Dataset/MOTSChallenge'
@@ -290,36 +308,10 @@ if __name__ == '__main__':
                 visual = visualize_current_frame(frame_image, tracklets, pred=False)
                 visual_save_path = os.path.join(video_track_result_path, frame.split('.')[0] + '.jpg')
                 cv2.imwrite(visual_save_path, visual)
+
+            if args.store_for_eval == True:
+                eval_array = frame_store_for_eval(frame_image, tracklets)
+                eval_save_path = os.path.join(video_track_result_path, frame.split('.')[0] + '.png')
+                eval_png = Image.fromarray(eval_array)
+                eval_png.save(eval_save_path)
             
-
-
-
-
-    '''
-    img = skimage.io.imread('MaskRCNN/images/9247489789_132c0d534a_z.jpg')
-    result = mydetector.detect([img])
-    print(result[0]['rois'].shape)
-    '''
-
-
-
-    '''
-    #SiamMask Test Code:
-    img1 = cv2.imread('SiamMask/testdata/img/000000.png')
-    print(img1.shape)
-    target_pos = np.array([813, 281.25])    # target_pos: np.array([cols, rows]) which indicate the center point position
-    target_sz = np.array([95, 187.5])       # target_sz:  np.array([target_width, target_height]) which indicate the target size
-
-    examplar_feature = mytracker.get_examplar_feature(img1, target_pos, target_sz)
-    
-    for index in range(154):
-        str_index = "%04d" % index
-        img = cv2.imread('SiamMask/testdata/img/00' + str_index + '.png')
-        target_pos, target_sz, _, mask = mytracker.siamese_track(img, target_pos, target_sz, examplar_feature)
-
-        mask = mask > 0.3
-        img[:, :, 2] = mask * 255 + (1 - mask) * img[:, :, 2]
-        print(mask.shape)
-        #cv2.imshow("result", img)
-        #cv2.waitKey(1)
-    '''
