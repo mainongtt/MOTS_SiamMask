@@ -2,7 +2,7 @@ import numpy as np
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
-
+from torchvision import transforms
 import os
 import sys
 import time
@@ -18,7 +18,7 @@ def to_torch(ndarray):
 
 def im_to_torch(img):
     img = np.transpose(img, (2, 0, 1))  # C*H*W
-    img = to_torch(img).float()
+    img = to_torch(img).float() / 255   # 0~255  to  0~1
     return img
 
 
@@ -47,19 +47,25 @@ class ReID(object):
 
         self.net.classifier = nn.Sequential()    # Remove the classifier layer in reference situation
 
+
     def get_reid_feature(self, image):
-        tensor_img = Variable( im_to_torch(image).unsqueeze(0) )
-        return self.net(tensor_img)    # In tensor 
+        torch_img = im_to_torch(image)
+        torch_img = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(torch_img).unsqueeze(0)
+        input_tensor = Variable( torch_img )
+        return self.net(input_tensor)    # In tensor 
     
 
 
 
 if __name__ == "__main__":
     myreider = ReID('fp16')
-    input = Variable(torch.FloatTensor(1, 3, 256, 128))
-    start_time = time.time()
-    for i in range(100):
-        output = myreider.net(input)
-        print(i)
-    end_time = time.time()
+    a = np.random.rand(256, 128, 3)
+    torch_a = im_to_torch(a)
+    torch_a = transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(torch_a).unsqueeze(0)
+    print(torch_a)
+    input = Variable(torch_a)
+
+    output = myreider.net(input)
+    print(output)
+
 
