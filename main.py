@@ -218,7 +218,7 @@ def frame_store_for_eval(frame_image, tracklets):
 
     ## Here is just a simple method to solve overlap
     result = mask_list[0]
-    for index in range(1, tracklet_num):
+    for index in range(1, len(mask_list)):
         overlap_mask = result * mask_list[index] == 0
         result += mask_list[index] * overlap_mask
     return result.astype(np.int32)
