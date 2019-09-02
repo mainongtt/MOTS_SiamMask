@@ -52,7 +52,10 @@ class ReID(object):
         return self.net(tensor_img)    # In tensor 
     
     def get_feature_distance(self, feature_1, feature_2):
-        return 
+        '''
+        feature with size 1 * 2048 or so
+        '''
+        return torch.dist(feature_1, feature_2).item()
 
 
 
