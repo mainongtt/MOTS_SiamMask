@@ -4,6 +4,9 @@ SiamMaskPath = os.path.join(os.getcwd(), 'SiamMask')
 sys.path.append(SiamMaskPath)
 MaskRCNNPath = os.path.join(os.getcwd(), 'MaskRCNN')
 sys.path.append(MaskRCNNPath)
+ReIDPath = os.path.join(os.getcwd(), 'ReID')
+sys.path.append(ReIDPath)
+
 
 import cv2
 import numpy as np
@@ -13,6 +16,7 @@ from sklearn.utils.linear_assignment_ import linear_assignment
 
 # Issue: 同时导入时会出bug
 import singletracker
+import reidprocessor
 #import detector
 
 
@@ -22,10 +26,12 @@ import singletracker
 ## Args class for debugging only
 class Args(object):
     def __init__(self):
-        self.visualize = False
+        self.visualize = True
         self.siammask_threshold = 0.3
         self.iou_threshold = 0.3
         self.store_for_eval = True
+        self.croped_obj_image_shape = (256, 128)
+        self.score_threshold = 0.9
 
 
 
@@ -83,6 +89,17 @@ def mask_iou(det_mask, pred_mask):
     Intersection =  (pred_mask * det_mask) != 0
     return np.sum(Intersection) / np.sum(Union)
 
+
+
+def get_obj_croped_image(frame_image, obj_pos, obj_sz, output_shape):
+    top_left_x = int( obj_pos[0] - obj_sz[0] / 2 )
+    top_left_y  = int( obj_pos[1] - obj_sz[1] / 2 )
+    bottom_right_x = int( top_left_x + obj_sz[0] )
+    bottom_right_y = int( top_left_y + obj_sz[1] )
+    crop_image = frame_image[top_left_y:bottom_right_y, top_left_x:bottom_right_x, :]
+    
+    assert (crop_image.shape[0] != 0 and crop_image.shape[1] != 0)
+    return cv2.resize(crop_image, output_shape, interpolation = cv2.INTER_AREA)
 
 
 
@@ -184,6 +201,7 @@ if __name__ == '__main__':
     vot_model_path = 'SiamMask/pretrained/SiamMask_VOT.pth'
     vot_config_path = 'SiamMask/config/config_vot.json'
     mytracker = singletracker.SingleTracker(vot_config_path, vot_model_path)
+    myreider = reidprocessor.ReID('fp16')
     
 
     ## Mian process pipeline
@@ -215,13 +233,15 @@ if __name__ == '__main__':
 
             ## Select the detection result with class people (1) and car (3)
             class_id_set = set( [1, 3] )
-            class_filter = [ index for index, item in enumerate(det_result['class_ids']) if item in class_id_set ]
+            class_filter = [ index for index, item in enumerate(det_result['class_ids']) if item in class_id_set]
+            score_filter = [ index for index, item in enumerate(det_result['scores']) if item > args.score_threshold]
+            det_filter = [index for index in class_filter if index in score_filter]
 
             filt_det_result = {}
-            filt_det_result['masks'] = det_result['masks'][:, :, class_filter]
-            filt_det_result['rois'] = det_result['rois'][class_filter]
-            filt_det_result['class_ids'] = det_result['class_ids'][class_filter]
-            filt_det_result['scores'] = det_result['scores'][class_filter]
+            filt_det_result['masks'] = det_result['masks'][:, :, det_filter]
+            filt_det_result['rois'] = det_result['rois'][det_filter]
+            filt_det_result['class_ids'] = det_result['class_ids'][det_filter]
+            filt_det_result['scores'] = det_result['scores'][det_filter]
 
             det_result = filt_det_result
 
@@ -248,8 +268,20 @@ if __name__ == '__main__':
                     
                     obj_mask = frame_masks[:, :, obj_index]
                     obj_score = frame_scores[obj_index]
+                    obj_croped_image = get_obj_croped_image(frame_image, obj_pos, obj_sz, args.croped_obj_image_shape)
+
+
                     examplar_feature = mytracker.get_examplar_feature(frame_image, obj_pos, obj_sz)
-                    tracklet = Tracklet(track_id_to_assign, obj_class_id, obj_pos, obj_sz, obj_mask, obj_score, examplar_feature)
+                    match_feature = myreider.get_reid_feature(obj_croped_image)
+                    
+                    tracklet = Tracklet(track_id_to_assign, 
+                                        obj_class_id, 
+                                        obj_pos, 
+                                        obj_sz, 
+                                        obj_mask, 
+                                        obj_score, 
+                                        examplar_feature, 
+                                        match_feature)
                     track_id_to_assign += 1    # Increase the unused track id 
                     tracklets.append(tracklet)
             
@@ -279,7 +311,10 @@ if __name__ == '__main__':
                         obj_mask = det_result['masks'][:, :, det_result_index]
                         obj_score = det_result['scores'][det_result_index]
 
-                        tracklet.update_state(obj_pos, obj_sz, obj_mask, obj_score)
+                        obj_croped_image = get_obj_croped_image(frame_image, tracklet.target_pos, tracklet.target_sz, args.croped_obj_image_shape)
+                        match_feature = myreider.get_reid_feature(obj_croped_image)
+
+                        tracklet.update_state(obj_pos, obj_sz, obj_mask, obj_score, match_feature)
 
                 ## Create and initialise new tracklets for unmatched det result
                 for det_result_index in unmatched_det_result:
@@ -291,9 +326,20 @@ if __name__ == '__main__':
 
                     obj_mask = det_result['masks'][:, :, det_result_index]
                     obj_score = det_result['scores'][det_result_index]
-                    examplar_feature = mytracker.get_examplar_feature(frame_image, obj_pos, obj_sz)
                     
-                    tracklet = Tracklet(track_id_to_assign, obj_class_id, obj_pos, obj_sz, obj_mask, obj_score, examplar_feature)
+                    obj_croped_image = get_obj_croped_image(frame_image, obj_pos, obj_sz, args.croped_obj_image_shape)
+                    
+                    examplar_feature = mytracker.get_examplar_feature(frame_image, obj_pos, obj_sz)
+                    match_feature = myreider.get_reid_feature(obj_croped_image)
+                    
+                    tracklet = Tracklet(track_id_to_assign, 
+                                        obj_class_id, 
+                                        obj_pos, 
+                                        obj_sz, 
+                                        obj_mask, 
+                                        obj_score, 
+                                        examplar_feature, 
+                                        match_feature)
                     track_id_to_assign += 1    # Increase the unused track id 
                     tracklets.append(tracklet)
                 
