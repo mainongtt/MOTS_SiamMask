@@ -91,6 +91,7 @@ def mask_iou(det_mask, pred_mask):
 
 
 
+
 def get_obj_croped_image(frame_image, obj_pos, obj_sz, output_shape):
     top_left_x = int( obj_pos[0] - obj_sz[0] / 2 )
     top_left_y  = int( obj_pos[1] - obj_sz[1] / 2 )
@@ -100,6 +101,7 @@ def get_obj_croped_image(frame_image, obj_pos, obj_sz, output_shape):
     
     assert (crop_image.shape[0] != 0 and crop_image.shape[1] != 0)
     return cv2.resize(crop_image, output_shape, interpolation = cv2.INTER_AREA)
+
 
 
 
