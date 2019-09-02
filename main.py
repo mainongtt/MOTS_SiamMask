@@ -11,6 +11,7 @@ sys.path.append(ReIDPath)
 import cv2
 import numpy as np
 import PIL.Image as Image
+import torch
 
 from sklearn.utils.linear_assignment_ import linear_assignment
 
@@ -27,17 +28,21 @@ import reidprocessor
 class Args(object):
     def __init__(self):
         self.visualize = True
-        self.siammask_threshold = 0.3
-        self.iou_threshold = 0.3
         self.store_for_eval = True
-        self.croped_obj_image_shape = (256, 128)
-        self.score_threshold = 0.9
 
+        self.croped_obj_image_shape = (256, 128)
+        self.max_age_since_update = 5
+
+        self.score_threshold = 0.9
+        self.siammask_threshold = 0.3
+        self.iou_threshold = 0.0000000
+        self.reid_threshold = 10    #Test
 
 
 
 class Tracklet(object):
     def __init__(self, target_track_id, target_class_id, target_pos, target_sz, target_mask, target_score, examplar_feature, match_feature = None):
+        ## Identification feature
         self.target_track_id = target_track_id
 
         self.target_class_id = target_class_id
@@ -46,14 +51,18 @@ class Tracklet(object):
         else:
             self.base_number = 1000
         
+        ## Target feature
         self.target_pos = target_pos
         self.target_sz = target_sz
         self.target_mask = target_mask
         self.target_score = target_score
         self.examplar_feature = examplar_feature
-        self.match_feature = match_feature    # To be defined
+        self.match_feature = match_feature
 
-        self.update_flag = True    # Indicate that the tracklet is updated in current frame
+        ## Temporal feature
+        self.under_tentative = True    # Under tentative in first three frames
+        self.age_since_init = 0    # Unused now
+        self.age_since_update = 0
 
         ## Parameter predicted by Siammask 
         self.predicted_pos = None
@@ -61,7 +70,25 @@ class Tracklet(object):
         self.predicted_mask = None
         self.predicted_score = None
     
-    def update_state(self, target_pos, target_sz, target_mask, target_score, match_feature = None):
+
+    def update_temporal_state(flag):
+        '''
+        Being called when:
+            In tentative period and being tracked
+            Not in tentative period
+        '''
+        if flag == 'matched':
+            self.age_since_update = 0
+            self.age_since_init += 1
+        elif flag == 'unmatched':
+            self.age_since_update += 1
+            self.age_since_init += 1
+        
+        if self.under_tentative == True and self.age_since_init >= 3:
+            self.under_tentative = False
+
+
+    def update_target_state(self, target_pos, target_sz, target_mask, target_score, match_feature = None):
         self.target_pos = target_pos
         self.target_sz = target_sz
         self.target_mask = target_mask
@@ -90,6 +117,13 @@ def mask_iou(det_mask, pred_mask):
     return np.sum(Intersection) / np.sum(Union)
 
 
+def get_feature_distance(feature_1, feature_2):
+    '''
+    feature with size 1 * 2048 or so
+    '''
+    return torch.dist(feature_1, feature_2).item()
+
+
 
 
 def get_obj_croped_image(frame_image, obj_pos, obj_sz, output_shape):
@@ -105,7 +139,7 @@ def get_obj_croped_image(frame_image, obj_pos, obj_sz, output_shape):
 
 
 
-def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.5):
+def associate_detection_to_tracklets(det_result, det_result_match_feature, tracklets, iou_threshold = 0.5):
     ## Conduct association between frame_detect_result and tracklets' predicted result
      # Without appearance matching 20190830
     frame_masks = det_result['masks']
@@ -115,11 +149,16 @@ def associate_detection_to_tracklets(det_result, tracklets, iou_threshold = 0.5)
 
     tracklet_num = len(tracklets)
     det_object_num = frame_masks.shape[2]
+
     iou_matrix = np.zeros( shape=(det_object_num, tracklet_num), dtype=np.float32 )
+    dist_matrix = np.zeros( shape=(det_object_num, tracklet_num), dtype=np.float32 )
+
     for det_object_index in range(det_object_num):
         for tracklet_index in range(tracklet_num):
             iou_matrix[det_object_index][tracklet_index] = mask_iou( frame_masks[:, :, det_object_index], tracklets[tracklet_index].predicted_mask )
-    matched_indices = linear_assignment(-iou_matrix)
+            dist_matrix[det_object_index][tracklet_index] = get_feature_distance(   det_result_match_feature[det_object_index], 
+                                                                                    tracklets[tracklet_index].match_feature )
+    matched_indices = linear_assignment( -(iou_matrix) + (dist_matrix / 45) )
 
 
     unmatched_detections = []
@@ -248,8 +287,7 @@ if __name__ == '__main__':
             det_result = filt_det_result
 
 
-            for tracklet in tracklets:
-                tracklet.update_flag = False
+
 
             if len(tracklets) == 0:
                 ## Init trackldet_object_numets with current frame
@@ -297,8 +335,23 @@ if __name__ == '__main__':
                     predicted_mask = predicted_mask > args.siammask_threshold    # To get a binary mask
 
                     tracklet.update_predicted_state(predicted_pos, predicted_sz, predicted_mask, predicted_score)
+
+
+                det_result_match_feature = []
+                for obj_index in range(det_object_num):
+                    obj_roi = det_result['rois'][obj_index]
+
+                    obj_pos = np.array( [np.mean(obj_roi[1::2]), np.mean(obj_roi[0::2])] )
+                    obj_sz = np.array( [obj_roi[3]-obj_roi[1], obj_roi[2]-obj_roi[0]] )
+                    obj_croped_image = get_obj_croped_image(frame_image, obj_pos, obj_sz, args.croped_obj_image_shape)
+
+                    match_feature = myreider.get_reid_feature(obj_croped_image)
+                    det_result_match_feature.append(match_feature)
                 
-                matched, unmatched_det_result, unmatched_tracklets = associate_detection_to_tracklets(det_result, tracklets, args.iou_threshold)
+                matched, unmatched_det_result, unmatched_tracklets = associate_detection_to_tracklets(  det_result, 
+                                                                                                        det_result_match_feature, 
+                                                                                                        tracklets, 
+                                                                                                        args.iou_threshold)
                 
                 ## Update matched tracklets with assigned det result
                 for tracklet_index, tracklet in enumerate(tracklets):
@@ -316,7 +369,8 @@ if __name__ == '__main__':
                         obj_croped_image = get_obj_croped_image(frame_image, tracklet.target_pos, tracklet.target_sz, args.croped_obj_image_shape)
                         match_feature = myreider.get_reid_feature(obj_croped_image)
 
-                        tracklet.update_state(obj_pos, obj_sz, obj_mask, obj_score, match_feature)
+                        tracklet.update_target_state(obj_pos, obj_sz, obj_mask, obj_score, match_feature)
+                        tracklet.update_temporal_state('matched')
 
                 ## Create and initialise new tracklets for unmatched det result
                 for det_result_index in unmatched_det_result:
@@ -330,27 +384,43 @@ if __name__ == '__main__':
                     obj_score = det_result['scores'][det_result_index]
                     
                     obj_croped_image = get_obj_croped_image(frame_image, obj_pos, obj_sz, args.croped_obj_image_shape)
-                    
-                    examplar_feature = mytracker.get_examplar_feature(frame_image, obj_pos, obj_sz)
                     match_feature = myreider.get_reid_feature(obj_croped_image)
+
+                    min_dist = sys.float_info.max
+                    min_dist_tracklet = None
+                    for tracklet_index in range( len(tracklets) ):
+                        if traclet.age_since_update != 0 and get_feature_distance(match_feature, tracklet.match_feature) < min_dist:
+                            min_dist = get_feature_distance(match_feature, tracklet.match_feature)
+                            min_dist_tracklet = tracklets[tracklet_index]
+                    if min_dist < args.reid_threshold:
+                        tracklet.update_target_state(obj_pos, obj_sz, obj_mask, obj_score, match_feature)
+                        tracklet.update_temporal_state('matched')
                     
-                    tracklet = Tracklet(track_id_to_assign, 
-                                        obj_class_id, 
-                                        obj_pos, 
-                                        obj_sz, 
-                                        obj_mask, 
-                                        obj_score, 
-                                        examplar_feature, 
-                                        match_feature)
-                    track_id_to_assign += 1    # Increase the unused track id 
-                    tracklets.append(tracklet)
+                    else:
+                        examplar_feature = mytracker.get_examplar_feature(frame_image, obj_pos, obj_sz)
+                    
+                    
+                        tracklet = Tracklet(track_id_to_assign, 
+                                            obj_class_id, 
+                                            obj_pos, 
+                                            obj_sz, 
+                                            obj_mask, 
+                                            obj_score, 
+                                            examplar_feature, 
+                                            match_feature)
+                        track_id_to_assign += 1    # Increase the unused track id 
+                        tracklets.append(tracklet)
                 
                 ## Remove untracked tracklets
                 tracklet_index = len(tracklets)
                 for tracklet in reversed(tracklets):
                     tracklet_index -= 1
-                    if tracklet.update_flag == False:
+                    if tracklet.age_since_update >= args.max_age_since_update:
                         tracklets.pop(tracklet_index)
+                    else:
+                        tracklet.update_temporal_state('unmatched')
+
+
 
             if args.visualize == True:
                 visual = visualize_current_frame(frame_image, tracklets, pred=False)
