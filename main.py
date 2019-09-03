@@ -29,13 +29,15 @@ class Args(object):
         self.visualize = True
         self.store_for_eval = True
 
-        self.croped_obj_image_shape = (256, 128)
+        self.croped_obj_image_shape = (128, 256)
         self.max_age_since_update = 5
 
         self.det_score_threshold = 0.9
         self.siammask_threshold = 0.3
         self.iou_threshold = 0.3
-        self.reid_threshold = 3.333    #Test not experimented
+        self.reid_threshold = 5.0    #Test not experimented
+
+        self.dataset = 'MOTSChallenge'    # choice = ['MOTSChallenge', 'KITTYMOTS']
 
 
 
@@ -242,9 +244,21 @@ if __name__ == '__main__':
     
 
     ## Mian process pipeline
-    dataset_path = 'Dataset/MOTSChallenge'
+    if args.dataset == 'MOTSChallenge':
+        dataset_path = 'Dataset/MOTSChallenge'
+    elif args.dataset == 'KITTYMOTS':
+        dataset_path = 'Dataset/KITTYMOTS'
     det_result_path = os.path.join(dataset_path, 'maskrcnn')
-    track_result_path = 'Result'
+    
+    
+    if not os.path.exists('Result'):
+        os.mkdir('Result')
+
+    if args.dataset == 'MOTSChallenge':
+        track_result_path = 'Result/MOTSChallenge'
+    elif args.dataset == 'KITTYMOTS':
+        track_result_path = 'Result/KITTYMOTS'
+    
     if not os.path.exists(track_result_path):
         os.mkdir(track_result_path)
     
