@@ -99,7 +99,7 @@ if __name__ == "__main__":
     model_dir = 'logs'
     mydetector = Detector(coco_model_path, model_dir)
 
-    dataset_path = '../Dataset/MOTSChallenge'
+    dataset_path = '../Dataset/KITTYMOTS'
     videos_path = os.path.join(dataset_path, 'images')
     videos = os.listdir(videos_path)   #['0002', '0005', ...]
 
