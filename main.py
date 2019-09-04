@@ -158,7 +158,7 @@ def associate_detection_to_tracklets(det_result, reid_dist_matrix, tracklets, io
         for tracklet_index in range(tracklet_num):
             iou_matrix[det_object_index][tracklet_index] = mask_iou( frame_masks[:, :, det_object_index], tracklets[tracklet_index].predicted_mask )
     
-    matched_indices = linear_assignment( -(iou_matrix) + (reid_dist_matrix / 45) )    # TMP set scale to 45 which is sqrt(2048)
+    matched_indices = linear_assignment( -iou_matrix )
 
 
     unmatched_detections = []
@@ -174,7 +174,7 @@ def associate_detection_to_tracklets(det_result, reid_dist_matrix, tracklets, io
     #filter out matched with low IOU
     matches = []
     for m in matched_indices:
-        if(iou_matrix[m[0],m[1]] < iou_threshold):
+        if(iou_matrix[m[0],m[1]] < iou_threshold or reid_dist_matrix[m[0],m[1]] > args.reid_dist_threshold):
             unmatched_detections.append(m[0])
             unmatched_tracklets.append(m[1])
         else:
@@ -463,6 +463,8 @@ if __name__ == '__main__':
                                                             tracklet.predicted_score,
                                                             tracklet.match_feature)
                                 tracklet.update_temporal_state('matched')
+                            else:
+                                tracklet.update_temporal_state('unmatched')
                         else:
                             tracklet.update_temporal_state('unmatched')
 
