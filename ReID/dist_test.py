@@ -81,7 +81,7 @@ if __name__ == "__main__":
     my_dataset = Market1501_Dataset(transform=data_transform)
 
     dataset_loader = torch.utils.data.DataLoader(my_dataset,
-                                                batch_size=2, 
+                                                batch_size=2,
                                                 shuffle=False,
                                                 num_workers=4)
     
