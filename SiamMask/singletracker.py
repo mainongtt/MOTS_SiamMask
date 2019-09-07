@@ -1,8 +1,9 @@
-# --------------------------------------------------------
-# SiamMask
-# Licensed under The MIT License
-# Written by Qiang Wang (wangqiang2015 at ia.ac.cn)
-# --------------------------------------------------------
+###################################################
+# MOTS_SiamMask
+# Author:       Yunyao Mao
+# Date update:  2019.09.07
+# Email:        myy2016@mail.ustc.edu.cn
+###################################################
 from __future__ import division
 import logging
 import numpy as np

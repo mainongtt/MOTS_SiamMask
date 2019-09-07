@@ -1,3 +1,9 @@
+###################################################
+# MOTS_SiamMask
+# Author:       Yunyao Mao
+# Date update:  2019.09.07
+# Email:        myy2016@mail.ustc.edu.cn
+###################################################
 import os
 import sys
 SiamMaskPath = os.path.join(os.getcwd(), 'SiamMask')
@@ -27,16 +33,16 @@ import reidprocessor
 class Args(object):
     def __init__(self):
         self.visualize = True
-        self.store_for_eval = False
+        self.store_for_eval = True
 
         self.croped_obj_image_shape = (128, 256)
-        self.max_age_since_update = 5       # Max survive age for lose tracking obj
+        self.max_age_since_update = 15      # Max survive age for lose tracking obj
 
-        self.det_score_threshold = 0.9      # Det score threshold to filt low score det input
-        self.siammask_threshold = 0.3       # Siammask threshold for siammask model to get binary mask
+        self.det_score_threshold = 0.85     # Det score threshold to filt low score det input
+        self.siammask_threshold = 0.4       # Siammask threshold for siammask model to get binary mask
         self.iou_threshold = 0.3            # IoU threshold in association process
         self.iou_conflict_threshold = 0.3   # IoU threshold to judge iou confliction when siammask insist
-        self.reid_dist_threshold = 5.0      # Threshold for reid model to judge if it's the same obj 
+        self.reid_dist_threshold = 4.5      # Threshold for reid model to judge if it's the same obj 
         self.pred_score_threshold = 0.98    # Threshold for Siammask to insist it's result when obj not detected
 
         self.dataset = 'MOTSChallenge'      # choice = ['MOTSChallenge', 'KITTYMOTS']
@@ -72,6 +78,7 @@ class Tracklet(object):
         self.predicted_sz = None
         self.predicted_mask = None
         self.predicted_score = None
+        self.pred_match_feature = None
     
 
     def update_temporal_state(self, flag):
@@ -98,11 +105,12 @@ class Tracklet(object):
         self.match_feature = match_feature
 
 
-    def update_predicted_state(self, predicted_pos, predicted_sz, predicted_mask, predicted_score):
+    def update_predicted_state(self, predicted_pos, predicted_sz, predicted_mask, predicted_score, pred_match_feature):
         self.predicted_pos = predicted_pos
         self.predicted_sz = predicted_sz
         self.predicted_mask = predicted_mask
-        self.predicted_score = predicted_score    
+        self.predicted_score = predicted_score
+        self.pred_match_feature = pred_match_feature
 
 
 
@@ -129,10 +137,10 @@ def get_feature_distance(feature_1, feature_2):
 
 
 def get_obj_croped_image(frame_image, obj_pos, obj_sz, output_shape):
-    top_left_x = int( obj_pos[0] - obj_sz[0] / 2 )
-    top_left_y  = int( obj_pos[1] - obj_sz[1] / 2 )
-    bottom_right_x = int( top_left_x + obj_sz[0] )
-    bottom_right_y = int( top_left_y + obj_sz[1] )
+    top_left_x = max( int( obj_pos[0] - obj_sz[0] / 2 ), 0 )
+    top_left_y  = max( int( obj_pos[1] - obj_sz[1] / 2 ), 0 )
+    bottom_right_x = min( int( top_left_x + obj_sz[0] ), frame_image.shape[1] - 1 )
+    bottom_right_y = min( int( top_left_y + obj_sz[1] ), frame_image.shape[0] - 1 )
     crop_image = frame_image[top_left_y:bottom_right_y, top_left_x:bottom_right_x, :]
     
     assert (crop_image.shape[0] != 0 and crop_image.shape[1] != 0)
@@ -248,20 +256,15 @@ if __name__ == '__main__':
     
 
     ## Mian process pipeline
-    if args.dataset == 'MOTSChallenge':
-        dataset_path = 'Dataset/MOTSChallenge'
-    elif args.dataset == 'KITTYMOTS':
-        dataset_path = 'Dataset/KITTYMOTS'
+    dataset_path = 'Dataset/' + args.dataset
     det_result_path = os.path.join(dataset_path, 'maskrcnn')
     
     
     if not os.path.exists('Result'):
         os.mkdir('Result')
 
-    if args.dataset == 'MOTSChallenge':
-        track_result_path = 'Result/MOTSChallenge'
-    elif args.dataset == 'KITTYMOTS':
-        track_result_path = 'Result/KITTYMOTS'
+
+    track_result_path = 'Result/' + args.dataset
     
     if not os.path.exists(track_result_path):
         os.mkdir(track_result_path)
@@ -350,7 +353,10 @@ if __name__ == '__main__':
                     predicted_pos, predicted_sz, predicted_score, predicted_mask = predicted_result
                     predicted_mask = predicted_mask > args.siammask_threshold    # To get a binary mask
 
-                    tracklet.update_predicted_state(predicted_pos, predicted_sz, predicted_mask, predicted_score)
+                    pred_croped_image = get_obj_croped_image(frame_image, predicted_pos, predicted_sz, args.croped_obj_image_shape)
+                    pred_match_feature = myreider.get_reid_feature(pred_croped_image)
+
+                    tracklet.update_predicted_state(predicted_pos, predicted_sz, predicted_mask, predicted_score, pred_match_feature)
 
                 
 
@@ -449,7 +455,8 @@ if __name__ == '__main__':
                         tracklets.pop(tracklet_index)
                     elif tracklet.updated_flag == False:
                         ##  SiamMask Insist it's result
-                        if tracklet.predicted_score >= args.pred_score_threshold:
+                        pred_feature_distance = get_feature_distance(tracklet.match_feature, tracklet.pred_match_feature)
+                        if tracklet.predicted_score >= args.pred_score_threshold and pred_feature_distance < args.reid_dist_threshold:
                             is_iou_conflict = False
                             tracked_tracklets = [item for item in tracklets if item.updated_flag == True]
                             for tracked_tracklet in tracked_tracklets:

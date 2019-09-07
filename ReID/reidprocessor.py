@@ -1,3 +1,9 @@
+###################################################
+# MOTS_SiamMask
+# Author:       Yunyao Mao
+# Date update:  2019.09.07
+# Email:        myy2016@mail.ustc.edu.cn
+###################################################
 import numpy as np
 import torch
 from torch.autograd import Variable
