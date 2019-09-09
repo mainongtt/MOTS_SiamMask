@@ -1,5 +1,0 @@
-models/fp16/*.pth
-models/ft_net_dense/*.pth
-models/ft_ResNet50/*.pth
-models/PCB/*.pth
-__pycache__
