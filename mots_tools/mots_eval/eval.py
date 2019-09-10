@@ -1,6 +1,6 @@
 
 import sys
-sys.path.append('/media/myy/Code/SOT/MOTS_SiamMask/mots_tools')
+sys.path.append('/media/myy/MOTS/mots_tools')
 
 
 import pycocotools.mask as rletools

@@ -36,14 +36,14 @@ class Args(object):
         self.store_for_eval = True
 
         self.croped_obj_image_shape = (128, 256)
-        self.max_age_since_update = 15      # Max survive age for lose tracking obj
+        self.max_age_since_update = 5       # Max survive age for lose tracking obj
 
-        self.det_score_threshold = 0.85     # Det score threshold to filt low score det input
-        self.siammask_threshold = 0.4       # Siammask threshold for siammask model to get binary mask
+        self.det_score_threshold = 0.9      # Det score threshold to filt low score det input
+        self.siammask_threshold = 0.3       # Siammask threshold for siammask model to get binary mask
         self.iou_threshold = 0.3            # IoU threshold in association process
-        self.iou_conflict_threshold = 0.3   # IoU threshold to judge iou confliction when siammask insist
+        self.iou_conflict_threshold = 0.1   # IoU threshold to judge iou confliction when siammask insist
         self.reid_dist_threshold = 4.5      # Threshold for reid model to judge if it's the same obj 
-        self.pred_score_threshold = 0.98    # Threshold for Siammask to insist it's result when obj not detected
+        self.pred_score_threshold = 0.99    # Threshold for Siammask to insist it's result when obj not detected
 
         self.dataset = 'MOTSChallenge'      # choice = ['MOTSChallenge', 'KITTYMOTS']
 
@@ -149,7 +149,7 @@ def get_obj_croped_image(frame_image, obj_pos, obj_sz, output_shape):
 
 
 
-def associate_detection_to_tracklets(det_result, reid_dist_matrix, tracklets, iou_threshold = 0.5):
+def associate_detection_to_tracklets(det_result, reid_dist_matrix, tracklets, iou_threshold = 0.3):
     ## Conduct association between frame_detect_result and tracklets' predicted result
      # Without appearance matching 20190830
     frame_masks = det_result['masks']
@@ -197,17 +197,16 @@ def associate_detection_to_tracklets(det_result, reid_dist_matrix, tracklets, io
 
 
 
-def visualize_current_frame(frame_image, tracklets, pred=True):
+def visualize_current_frame(frame_image, tracklets, pred=False):
     if pred == True:
         for tracklet in tracklets:
             if tracklet.predicted_mask is not None and tracklet.updated_flag == True:
                 mask = tracklet.predicted_mask
                 frame_image[:, :, 2] = mask * 255 + (1 - mask) * frame_image[:, :, 2]
                 id_text = 'id: ' + str(tracklet.target_track_id)
-                score_text = 'score: ' + str(tracklet.predicted_score)
                 cols = int(tracklet.predicted_pos[0])
                 rows = int(tracklet.predicted_pos[1])
-                cv2.putText(frame_image, id_text, (cols, rows), cv2.FONT_HERSHEY_PLAIN, 1.2, (255, 255, 0), 2)###########
+                cv2.putText(frame_image, id_text, (cols, rows), cv2.FONT_HERSHEY_PLAIN, 1.2, (255, 255, 0), 2)
     
     else:
         for tracklet in tracklets:
@@ -478,7 +477,7 @@ if __name__ == '__main__':
 
 
             if args.visualize == True:
-                visual = visualize_current_frame(frame_image, tracklets, pred=True)
+                visual = visualize_current_frame(frame_image, tracklets, pred=False)
                 visual_save_path = os.path.join(video_track_result_path, frame.split('.')[0] + '.jpg')
                 cv2.imwrite(visual_save_path, visual)
 
