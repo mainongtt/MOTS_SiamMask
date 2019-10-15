@@ -41,7 +41,7 @@ class Args(object):
         self.det_score_threshold = 0.9      # Det score threshold to filt low score det input
         self.siammask_threshold = 0.3       # Siammask threshold for siammask model to get binary mask
         self.iou_threshold = 0.3            # IoU threshold in association process
-        self.iou_conflict_threshold = 0.1   # IoU threshold to judge iou confliction when siammask insist
+        self.iou_conflict_threshold = 0.2   # IoU threshold to judge iou confliction when siammask insist
         self.reid_dist_threshold = 4.5      # Threshold for reid model to judge if it's the same obj 
         self.pred_score_threshold = 0.99    # Threshold for Siammask to insist it's result when obj not detected
 
@@ -55,9 +55,9 @@ class Tracklet(object):
         self.target_track_id = target_track_id
 
         self.target_class_id = target_class_id
-        if target_class_id == 1:
+        if target_class_id == 1:    # people (1)
             self.base_number = 2000
-        else:
+        elif target_class_id == 3:  # car (3)
             self.base_number = 1000
         
         ## Target feature
@@ -164,7 +164,8 @@ def associate_detection_to_tracklets(det_result, reid_dist_matrix, tracklets, io
 
     for det_object_index in range(det_object_num):
         for tracklet_index in range(tracklet_num):
-            iou_matrix[det_object_index][tracklet_index] = mask_iou( frame_masks[:, :, det_object_index], tracklets[tracklet_index].predicted_mask )
+            if tracklets[tracklet_index].age_since_update == 0:
+                iou_matrix[det_object_index][tracklet_index] = mask_iou( frame_masks[:, :, det_object_index], tracklets[tracklet_index].predicted_mask )
     
     matched_indices = linear_assignment( -iou_matrix )
 
@@ -251,6 +252,7 @@ if __name__ == '__main__':
     vot_model_path = 'SiamMask/pretrained/SiamMask_VOT.pth'
     vot_config_path = 'SiamMask/config/config_vot.json'
     mytracker = singletracker.SingleTracker(vot_config_path, vot_model_path)
+
     myreider = reidprocessor.ReID('fp16')
     
 
@@ -290,7 +292,7 @@ if __name__ == '__main__':
 
 
             ## Select the detection result with class people (1) and car (3)
-            class_id_set = set( [1, 3] )
+            class_id_set = set( [1] )
             class_filter = [ index for index, item in enumerate(det_result['class_ids']) if item in class_id_set]
             score_filter = [ index for index, item in enumerate(det_result['scores']) if item > args.det_score_threshold]
             det_filter = [index for index in class_filter if index in score_filter]
@@ -343,21 +345,20 @@ if __name__ == '__main__':
             
             else:
                 for tracklet in tracklets:
+                    if tracklet.updated_flag == True:
+                        predicted_result = mytracker.siamese_track( frame_image,
+                                                                    tracklet.target_pos,
+                                                                    tracklet.target_sz,
+                                                                    tracklet.examplar_feature)
+                        predicted_pos, predicted_sz, predicted_score, predicted_mask = predicted_result
+                        predicted_mask = predicted_mask > args.siammask_threshold    # To get a binary mask
+
+                        pred_croped_image = get_obj_croped_image(frame_image, predicted_pos, predicted_sz, args.croped_obj_image_shape)
+                        pred_match_feature = myreider.get_reid_feature(pred_croped_image)
+
+                        tracklet.update_predicted_state(predicted_pos, predicted_sz, predicted_mask, predicted_score, pred_match_feature)
+
                     tracklet.update_temporal_state('reset_update_flag')
-                    
-                    predicted_result = mytracker.siamese_track( frame_image,
-                                                                tracklet.target_pos,
-                                                                tracklet.target_sz,
-                                                                tracklet.examplar_feature)
-                    predicted_pos, predicted_sz, predicted_score, predicted_mask = predicted_result
-                    predicted_mask = predicted_mask > args.siammask_threshold    # To get a binary mask
-
-                    pred_croped_image = get_obj_croped_image(frame_image, predicted_pos, predicted_sz, args.croped_obj_image_shape)
-                    pred_match_feature = myreider.get_reid_feature(pred_croped_image)
-
-                    tracklet.update_predicted_state(predicted_pos, predicted_sz, predicted_mask, predicted_score, pred_match_feature)
-
-                
 
 
                 
@@ -452,7 +453,7 @@ if __name__ == '__main__':
                     tracklet_index -= 1
                     if tracklet.age_since_update >= args.max_age_since_update:
                         tracklets.pop(tracklet_index)
-                    elif tracklet.updated_flag == False:
+                    elif tracklet.updated_flag == False and tracklet.age_since_update == 0:
                         ##  SiamMask Insist it's result
                         pred_feature_distance = get_feature_distance(tracklet.match_feature, tracklet.pred_match_feature)
                         if tracklet.predicted_score >= args.pred_score_threshold and pred_feature_distance < args.reid_dist_threshold:

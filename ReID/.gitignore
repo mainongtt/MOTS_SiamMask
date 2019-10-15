@@ -4,3 +4,4 @@ models/ft_ResNet50/*.pth
 models/PCB/*.pth
 Market
 __pycache__
+models/fp16/__pycache__
